@@ -1,8 +1,13 @@
 package com.yesidodo.mcstats.plugin;
 
-import com.sun.management.OperatingSystemMXBean;
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
+import oshi.SystemInfo;
+import oshi.hardware.HWDiskStore;
+import oshi.hardware.HardwareAbstractionLayer;
+import oshi.hardware.NetworkIF;
+
+import com.sun.management.OperatingSystemMXBean;
 
 import java.lang.management.ManagementFactory;
 import java.time.Instant;
@@ -12,9 +17,18 @@ import java.util.List;
 
 public final class SystemTelemetryCollector {
     private final String serverId;
+    private final HardwareAbstractionLayer hardware;
+    private long lastIoSampleTs;
+    private Long lastDiskReadBytes;
+    private Long lastDiskWriteBytes;
+    private Long lastNetworkRxBytes;
+    private Long lastNetworkTxBytes;
+    private Long lastGcCollections;
+    private long lastGcSampleTs;
 
     public SystemTelemetryCollector(String serverId) {
         this.serverId = serverId;
+        this.hardware = new SystemInfo().getHardware();
     }
 
     public TelemetrySample collect() {
@@ -24,6 +38,9 @@ public final class SystemTelemetryCollector {
         Double cpuUsage = readCpuUsagePercent();
         Double ramTotalMb = readTotalMemoryMb();
         Double ramUsedMb = readUsedMemoryMb(ramTotalMb);
+        IoRateEstimate ioEstimate = estimateIoRates(ts);
+        Double gcCollectionsPerMinute = estimateGcCollectionsPerMinute(ts);
+        Integer threadCount = readThreadCount();
 
         List<Integer> pings = new ArrayList<>();
         for (Player player : Bukkit.getOnlinePlayers()) {
@@ -39,8 +56,12 @@ public final class SystemTelemetryCollector {
                 cpuUsage,
                 ramUsedMb,
                 ramTotalMb,
-                null,
-                null,
+                ioEstimate.networkRxKbps(),
+                ioEstimate.networkTxKbps(),
+                ioEstimate.diskReadKbps(),
+                ioEstimate.diskWriteKbps(),
+                gcCollectionsPerMinute,
+                threadCount,
                 Bukkit.getOnlinePlayers().size(),
                 percentile(pings, 0.50),
                 percentile(pings, 0.95),
@@ -101,10 +122,6 @@ public final class SystemTelemetryCollector {
         return null;
     }
 
-    private static double bytesToMb(long bytes) {
-        return bytes / 1024d / 1024d;
-    }
-
     private static Double percentile(List<Integer> sortedValues, double q) {
         if (sortedValues.isEmpty()) {
             return null;
@@ -112,5 +129,85 @@ public final class SystemTelemetryCollector {
         int idx = (int) Math.ceil(q * sortedValues.size()) - 1;
         idx = Math.max(0, Math.min(sortedValues.size() - 1, idx));
         return (double) sortedValues.get(idx);
+    }
+
+    private IoRateEstimate estimateIoRates(long ts) {
+        long totalDiskRead = 0L;
+        long totalDiskWrite = 0L;
+        for (HWDiskStore disk : hardware.getDiskStores()) {
+            disk.updateAttributes();
+            totalDiskRead += Math.max(0L, disk.getReadBytes());
+            totalDiskWrite += Math.max(0L, disk.getWriteBytes());
+        }
+
+        long totalNetworkRx = 0L;
+        long totalNetworkTx = 0L;
+        for (NetworkIF networkIF : hardware.getNetworkIFs()) {
+            networkIF.updateAttributes();
+            totalNetworkRx += Math.max(0L, networkIF.getBytesRecv());
+            totalNetworkTx += Math.max(0L, networkIF.getBytesSent());
+        }
+
+        Double diskReadKbps = null;
+        Double diskWriteKbps = null;
+        Double networkRxKbps = null;
+        Double networkTxKbps = null;
+        if (lastIoSampleTs > 0 && ts > lastIoSampleTs &&
+                lastDiskReadBytes != null && lastDiskWriteBytes != null &&
+                lastNetworkRxBytes != null && lastNetworkTxBytes != null) {
+            double dt = ts - lastIoSampleTs;
+            diskReadKbps = toKbps(totalDiskRead - lastDiskReadBytes, dt);
+            diskWriteKbps = toKbps(totalDiskWrite - lastDiskWriteBytes, dt);
+            networkRxKbps = toKbps(totalNetworkRx - lastNetworkRxBytes, dt);
+            networkTxKbps = toKbps(totalNetworkTx - lastNetworkTxBytes, dt);
+        }
+
+        lastIoSampleTs = ts;
+        lastDiskReadBytes = totalDiskRead;
+        lastDiskWriteBytes = totalDiskWrite;
+        lastNetworkRxBytes = totalNetworkRx;
+        lastNetworkTxBytes = totalNetworkTx;
+        return new IoRateEstimate(diskReadKbps, diskWriteKbps, networkRxKbps, networkTxKbps);
+    }
+
+    private Double estimateGcCollectionsPerMinute(long ts) {
+        long current = ManagementFactory.getGarbageCollectorMXBeans().stream()
+                .mapToLong(bean -> Math.max(0L, bean.getCollectionCount()))
+                .sum();
+
+        Double perMinute = null;
+        if (lastGcCollections != null && lastGcSampleTs > 0 && ts > lastGcSampleTs) {
+            long delta = Math.max(0L, current - lastGcCollections);
+            double dt = ts - lastGcSampleTs;
+            perMinute = (delta / dt) * 60.0;
+        }
+
+        lastGcCollections = current;
+        lastGcSampleTs = ts;
+        return perMinute;
+    }
+
+    private static Integer readThreadCount() {
+        return ManagementFactory.getThreadMXBean().getThreadCount();
+    }
+
+    private static double bytesToMb(long bytes) {
+        return bytes / 1024d / 1024d;
+    }
+
+    private static Double toKbps(long byteDelta, double dtSeconds) {
+        if (dtSeconds <= 0) {
+            return null;
+        }
+        long normalized = Math.max(0L, byteDelta);
+        return (normalized / 1024.0) / dtSeconds;
+    }
+
+    private record IoRateEstimate(
+            Double diskReadKbps,
+            Double diskWriteKbps,
+            Double networkRxKbps,
+            Double networkTxKbps
+    ) {
     }
 }

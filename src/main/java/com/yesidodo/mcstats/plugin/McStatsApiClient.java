@@ -124,6 +124,10 @@ public final class McStatsApiClient {
             appendNullable(sb, "ramTotalMb", s.ramTotalMb());
             appendNullable(sb, "networkRxKbps", s.networkRxKbps());
             appendNullable(sb, "networkTxKbps", s.networkTxKbps());
+            appendNullable(sb, "diskReadKbps", s.diskReadKbps());
+            appendNullable(sb, "diskWriteKbps", s.diskWriteKbps());
+            appendNullable(sb, "gcCollectionsPerMinute", s.gcCollectionsPerMinute());
+            appendNullable(sb, "threadCount", s.threadCount());
             appendNullable(sb, "onlinePlayers", s.onlinePlayers());
             appendNullable(sb, "pingP50Ms", s.pingP50Ms());
             appendNullable(sb, "pingP95Ms", s.pingP95Ms());

@@ -1,5 +1,6 @@
 plugins {
     java
+    id("com.gradleup.shadow") version "8.3.6"
 }
 
 group = "com.yesidodo.mcstats"
@@ -18,6 +19,7 @@ repositories {
 
 dependencies {
     compileOnly("io.papermc.paper:paper-api:1.20.6-R0.1-SNAPSHOT")
+    implementation("com.github.oshi:oshi-core:6.6.5")
 }
 
 tasks {
@@ -31,5 +33,17 @@ tasks {
     withType<JavaCompile> {
         options.encoding = "UTF-8"
         options.release.set(21)
+    }
+
+    shadowJar {
+        archiveClassifier.set("")
+    }
+
+    jar {
+        archiveClassifier.set("plain")
+    }
+
+    build {
+        dependsOn(shadowJar)
     }
 }

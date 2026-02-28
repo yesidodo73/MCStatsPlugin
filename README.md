@@ -13,12 +13,16 @@ Paper plugin that collects in-game statistics and sends them to the MCStats API 
 - Telemetry collection for:
   - `TPS`, `MSPT`
   - `CPU usage`, `RAM used/total`
+  - `Disk read/write` (OS auto-detected)
+  - `Network Rx/Tx` (OS auto-detected)
+  - `GC collections per minute`, `thread count`
   - online players
   - ping percentiles (`p50`, `p95`, `p99`)
 - Async batched delivery to `/v1/events/batch`
 - Async batched delivery to `/v1/telemetry/batch`
 - In-memory retry queue
 - Required ingest auth headers (`server-id`, `api-key`, `timestamp`, `signature`, `idempotency-key`)
+- Windows/Linux runtime metrics are auto-detected via OSHI.
 
 ## Configuration (`config.yml`)
 
