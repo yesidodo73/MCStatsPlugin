@@ -1,0 +1,9 @@
+api:
+  base-url: "http://127.0.0.1:5000"
+  timeout-ms: 5000
+  flush-interval-seconds: 5
+  batch-size: 200
+  secret: ""
+
+collect:
+  playtime-tick-seconds: 60

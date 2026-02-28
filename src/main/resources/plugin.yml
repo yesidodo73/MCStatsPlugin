@@ -1,0 +1,6 @@
+name: MCStatsPlugin
+main: com.yesidodo.mcstats.plugin.MCStatsPlugin
+version: ${version}
+api-version: "1.20"
+author: yesidodo73
+description: Collect Minecraft statistics and send to MCStats API
